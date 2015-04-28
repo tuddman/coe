@@ -7,16 +7,16 @@
      body,td { font-family: arial;  font-size: 80%; }
      tt,pre { font-size: 120%; }
      
-     LI { margin-top: .4em; }
+     LI { margin-top: .8em; }
   </style>
 </head>
 <body>
 
 <h2>Configuring a new COE RHEL/CentOS 6 linux system</h2>
 Charles Roth<br/>
-Last update: 2014-12-12
+Last update: 2015-02-09
 
-<p/><b>I. Introduction</b><br>
+<p/><a name="intro"><b>I. Introduction</b></a><br>
 This document 
 describes specific steps taken to set up a new RHEL (Red Hat Enterprise Linux, 
 or CentOS) version 6 server(s) from ServerBeach.&nbsp;
@@ -24,10 +24,26 @@ Basically, this is just a record of what we do to change the base
 configuration of the server as provided by ServerBeach.
 
 <p/>
+<b>Table of Contents</b>
+<ol type="I">
+<li><a href="#intro">Introduction</a>
+<li><a href="#server">Basic Server Configuration</a>
+<li><a href="#install">Install software needed to build and run Caucus</a>
+<li><a href="#build">Build and Test Caucus</a>
+<li><a href="#av">Antivirus</a>
+<li><a href="#email">Configure Email</a>
+<li><a href="#repl">MySQL Replication</a>
+<li><a href="#move">How to move an existing Caucus site</a>
+<li><a href="#rsync">Rsync file backup</a>
+<li><a href="#wordpress">WordPress Support</a>
+</ol>
+
+
+<p/>
 This is a work-in-progress; check the "last update" data at the top for new versions.
 
 <p/>
-<b>II. Basic Server Configuration</b><br/>
+<a name="server"><b>II. Basic Server Configuration</b></a><br/>
 <ol>
   <li><b>Domain name</b>
   <ol type="a">
@@ -241,7 +257,7 @@ And (of course), add the mount command to /etc/rc.d/rc.local:
 </ol>
 
 <p/>
-<b>III. Install software needed to build and run Caucus</b>.
+<a name="install"><b>III. Install software needed to build and run Caucus</b></a>.
 
 <ol>
 <li><b>MySQL</b>.&nbsp;
@@ -308,7 +324,7 @@ Start MySQL at boot: edit /etc/rc.d/rc.local, and add
 
 </ol>
 
-<b>IV. Build and Test Caucus</b>
+<a name="build"><b>IV. Build and Test Caucus</b></a>
 <ol>
 <li>Make a userid to test in, e.g.
 <pre>
@@ -413,7 +429,7 @@ For example:
 </ol>
 
 <p/>
-<b>V. Antivirus</b>
+<a name="av"><b>V. Antivirus</b></a>
 The primary purpose of the antivirus software is to detect
 virus-laden software that is uploaded by users <b>into</b>
 Caucus.
@@ -504,7 +520,7 @@ Copy the 'viruschecker' file from the COE git repository, to /usr/local/bin.
 </ol>
 
 <p/>
-<b>VI. Configure Email</b>
+<a name="email"><b>VI. Configure Email</b></a>
 <ol>
 <li>Create a new userid 'mailhandler', e.g. something like:
 <pre>
@@ -573,7 +589,7 @@ Make sure you can send email from root.
 
 
 <p/>
-<b>VII. MySQL Replication</b><br/>
+<a name="repl"><b>VII. MySQL Replication</b></a><br/>
 This section assumes that we have two servers in play: server A, which will
 be the master, and server B, which is (mostly) used as a failover server
 in case A should die or become unavailable.
@@ -760,16 +776,31 @@ But multiple failures in a row are worth investigating.
 </ol>
 
 <p/>
-<b>VIII. How to move an existing Caucus site</b><br/>
+<a name="move"><b>VIII. How to move an existing Caucus site</b></a><br/>
 In order to move an existing site, you will have to shut it down
 for a period of time, depending on the size of the site.&nbsp;
 Generally it's best to allow a couple of hours.
+
+<p/>
+If this is a large site that may take many hours to move,
+read section VIII.5.b first -- you can speed up the 
+time to move the site by preparing it with 'rsync' first.
 
 <p/>
 The instructions below assume that the Caucus userid is 'caucus'
 and the database is called 'caucus_caucus'.&nbsp;
 Modify accordingly.
 <ol>
+
+<p/>
+<li><b>Create empty site on the new server.</b>&nbsp;
+Go through the usual procedure of creating an empty Caucus site,
+on the new server.&nbsp;
+Use the <b>same</b> name as the old site on the old server.&nbsp;
+Make sure it works.
+<p/>
+Then make sure to <b>shut it down</b> (see VIII.1 again.)
+
 <li><b>Stop old site processes</b>.&nbsp;  E.g.  on the old site, for site 'caucus', do:
 <pre>
    su - caucus
@@ -796,6 +827,7 @@ manually.)
 <li><b>Change DNS.</b>&nbsp;
 Change the DNS entry for the site to point to the new server.
 
+
 <p/>
 <li><b>Dump the MySQL database.</b>
 Starting in the home directory of the 'caucus' userid:
@@ -804,36 +836,73 @@ Starting in the home directory of the 'caucus' userid:
 </pre>
 
 <p/>
-<li><b>Archive the entire site.</b>
-Starting in the home directory of the 'caucus' userid:
+<li><b>Transfer the entire site.</b>
+Start by removing unused files:
 <pre>
    rm -rf SOCKET
+   rm -f TEMP/* TMP/*
+</pre>
+
+You can either transfer the site manually, or use 'rsync' to 
+do it for you.&nbsp;
+The manual approach is simplest for a small site; 
+the rsync is better for a large site that may take a long
+time to move.
+
+<ol type="a">
+<li><b>Manual approach</b>.&nbsp;
+Starting in the home directory of the 'caucus' userid:
+<pre>
    tar cvf /tmp/caucus.tar *
    gzip    /tmp/caucus.tar
 </pre>
 
+Now scp the /tmp/caucus.tar.gz file to the new server.&nbsp;
+Typically this means you will need to
+open the firewall on the new server (to allow access from the old server) for port 22 first.
+
+<li><b>Rsync</b>.&nbsp;
+In this approach, you gradually synchronize the files in 
+the caucus site on the old server, to the proper locaation on the new server.&nbsp;
+This can be done even while the old server is still running Caucus,
+and then done one final time once you stop the old server.
 <p/>
-<li><b>Transfer to the new server.</b>&nbsp;
-Typically, this means scp the /tmp/caucus.tar.gz file to somewhere on the new server.&nbsp;
-If you are "pushing" it from the old server to the new server, you will also need
-to open the firewall on the new server (to allow access from the old server) for port 22
-first.
+
+Assuming that 
+<ul>
+<li>You're logged in as root on the old server
+<li>That the userid is called "caucus" on both old and new servers
+<li>That the firewall on the new server allows incoming port 22 access from the old server
+<li>That /home/caucus has already been created on the new server
+</ul>
 
 <p/>
-<li><b>Create empty site on the new server.</b>&nbsp;
-Go through the usual procedure of creating an empty Caucus site,
-on the new server.&nbsp;
-Use the <b>same</b> name as the old site on the old server.&nbsp;
-Make sure it works.
+Then the following commands would synchronize the files from the old
+to the new server:
+
+<pre>
+   su - caucus
+   nice rsync -avz -e ssh --delete * caucus@newserver.com:/home/caucus >/tmp/rsync.log
+</pre>
+
+It will log the list of files that were copied, in /tmp/rsync.log.&nbsp;
+If you want to run this in the background, wait a few seconds until you know it is running,
+then press ctrl-Z, and type "bg %1".&nbsp;
+Then you can run other commands <b>while</b> this is running.
+
 <p/>
-Then make sure to <b>shut it down</b> (see VIII.1 again.)
+The rsync process can be repeated, later, as many times as needed; rsync is <b>very</b> good about
+detecting only what has changed on the old server, and copying that over.&nbsp;
+It can even be interrupted and started again, with no loss or error.
+</ol>
 
 <p/>
 <li><b>Overlay the new (empty) site</b> with the old data.&nbsp;
+<br/>
 Assuming that the old data has been placed in /tmp/oldcaucus.tar.gz, 
 as the new 'caucus' user on the new server do:
 <pre>
-   tar xvfz /tmp/oldcaucus.tar.gz
+   tar xvfz /tmp/oldcaucus.tar.gz      <i>(Skip this step if you've used the rsync method above.)</i>
    mysql -u caucus -p caucus_caucus -e "source caucus_caucus.sql;"
 </pre>
 
@@ -872,7 +941,7 @@ edit /etc/rc.d/rc.local and add:
 </ol>
 
 <p/>
-<b>IX. Rsync file backup</b><br/>
+<a name="rsync"><b>IX. Rsync file backup</b></a><br/>
 In addition to the automatic backup of the MySQL data via replication,
 the slave (aka "failover") server should also have regular backups
 of all other relevant files, notably including:
@@ -1006,9 +1075,225 @@ correct IP address) into the equivalent locations on the slave.
 </ol>
 
 
+<p/>
+<a name="wordpress"><b>X. WordPress Support</b></a><br/>
+This section is not directly related to Caucus or the backup/failover mechanisms.&nbsp;
+But it is a place to record useful configuration information about WordPress.
+
+<ol>
+<li><b>Install PHP</b>.&nbsp; As root, do:
+<pre>
+   yum install php.x86_64
+   yum install php-gd.x86_64
+   yum install php-mysql.x86_64
+</pre>
+
+Edit /etc/php.ini, and change upload_max_filesize to something large, say 2G.
+
+<pre>
+   service httpd restart
+</pre>
+
+<li><b>Install WordPress</b>.&nbsp;
+A server may have multiple, separate, installations of WordPress.&nbsp;
+Follow these steps to install a single instance.
+
+<ol type="a">
+<li>Create a new user, e.g. "events".&nbsp; As root:
+<pre>
+   useradd -u <i>nnnnn</i> -d /home/events events   (where '<i>nnnnn</i>' is an unused number in /etc/passwd)
+   passwd events
+   su - events
+   chmod 711 .
+</pre>
+
+<li><b>Download and install</b> the WordPress software (from 
+<a href="http://codex.wordpress.org/Installing_WordPress"
+  >codex.wordpress.org/Installing_WordPress</a>).&nbsp;
+Once you get the file (typically called something like wordpress-4.1.tar.gz),
+unpack it in the 'events' userid:
+<pre>
+   su - events      <i>(if you're not already logged in as 'events')</i>
+   tar xvfz /whereverthefileis/wordpress-4.1.tar.gz
+</pre>
+
+<li><b>Define the DNS.</b>&nbsp;
+E.g. change the DNS server so that (say) events.coexploration.org points to the IP
+address of the new server.
+
+<li><b>Define the HTTP record</b>.&nbsp; For example, create /etc/httpd/conf/vhosts,
+containing:
+<pre>
+   &lt;VirtualHost 66.135.33.165&gt;
+      ServerName     events.coexploration.org
+      DocumentRoot /home/events/wordpress
+   &lt;/VirtualHost&gt;
+</pre>
+and then (as root) restart httpd, e.g.
+<pre>
+   service httpd restart
+</pre>
+
+<li><b>Create the database</b>.&nbsp; I recommend following a standard pattern,
+modelled after the Caucus approach.&nbsp;
+E.g. prepend "wp_" to the name of the site (in this case "events").&nbsp;
+<pre>
+   mysql -u root -p
+   create database wp_events;
+   grant all on wp_events.* to wp_events@localhost identified by 'somePassword';
+   flush privilegs;
+   quit;
+</pre>
+
+<li><b>Run WordPress installer</b>.&nbsp;
+Point your browser at (for example) http://events.coexploration.org/wp-admin/setup-config.php.&nbsp;
+<table border="1">
+<tr><td>Database Name&nbsp;&nbsp;</td>
+
+<td>wp_events</td>
+<tr><td>User Name</td>
+<td>wp_events</td>
+
+<tr><td>Password</td>
+<td><i>(whatever you used above)</i></td>
+
+<tr><td>Database Host</td>
+<td>localhost</td>
+
+<tr><td>Table Prefix</td>
+<td>_</td>  <td><i>(Yes, really just an underscore)</i></td>
+</table>
+
+<li><b>Create wp-config.php</b>.&nbsp;
+The installer will complain that it can't write wp-config.php.&nbsp;
+This is good!
 
 <p/>
-<b>X. Next?</b>
+Manually cut-and-paste the text it offers you into (for example)
+/home/events/wordpress/wp-config.php.&nbsp;
+Continue with the install.
+
+<li><b>Fill in Site info</b>.&nbsp;
+Fill in the initial site info, admin user, password, and email.&nbsp;
+These can all be changed later.
+
+</ol>
+
+
+<p/>
+<li><b>WordPress updates</b>.&nbsp;
+WordPress has a, shall we say, pesky but useful auto-update mechanism.&nbsp;
+In order to allow the auto-update to work, one must enable an FTP server,
+and (briefly) open the firewall.
+
+<p/>
+The directions below enable this for a single user 'wp'.&nbsp;
+Adapt accordingly.&nbsp;
+All instructions are done as root.
+
+<ol type="a">
+<li><b>Install and configure FTP server</b>.&nbsp; Do this <b>once</b>:
+<pre>
+    yum install vsftpd.x86_64
+</pre>
+
+Edit /etc/vsftpd/vsftpd.conf, and edit it so that you have:
+<pre>
+   anonymous_enable=NO
+   local_enable=YES
+   write_enable=YES
+   userlist_deny=NO
+   userlist_file=/etc/vsftpd/allowed_users
+</pre>
+
+Then create a file /etc/vsftpd/allowed_users, containing just the one allowed userid 'wp':
+<pre>
+   wp
+</pre>
+
+(For more information about vsftpd.conf, see 
+<a href="http://ubuntuforums.org/showthread.php?t=518293"
+  >ubuntuforums.org/showthread.php?t=518293</a>.)
+
+<li><b>Create a script to turn off the firewall.</b>&nbsp;
+E.g. create a file /usr/local/bin/firewallOff, containing:
+<pre>
+   #!/bin/sh
+   
+   modprobe ip_tables
+   modprobe ip_conntrack
+   modprobe ip_conntrack_ftp
+   
+   iptables --flush
+   iptables --delete-chain
+   
+   iptables -P INPUT   ACCEPT
+   iptables -P FORWARD ACCEPT
+   iptables -P OUTPUT  ACCEPT
+</pre>
+
+Make it executable by root:
+<pre>
+   chmod 700 /usr/local/bin/firewallOff
+</pre>
+
+<li><b>Run vsftpd</b> when you actually need to do the WordPress update.&nbsp;
+<pre>
+   firewallOff
+   vsftpd
+</pre>
+
+<li><b>Do the WordPress update.</b>
+
+<li><b>Restore the firewall, and stop vsftpd</b>.
+<pre>
+   firewall
+   ps -ef | grep vsftpd | grep -v grep
+</pre>
+
+And kill each process that it shows.&nbsp;
+E.g. if it shows the following:
+<pre>
+   root     28413     1  0 16:44 ?        00:00:00 vsftpd
+</pre>
+
+Then do:
+<pre>
+   kill -9 28413
+</pre>
+
+</ol>
+
+<li><b>WordPress Themes</b>.&nbsp;
+WordPress has a bizarre security model.&nbsp;
+In order to install new themes, several things have to be turned off (and then on again aftewards).
+
+<ol type="a">
+<li>Make the upload directory writeable by the web server.&nbsp;
+For WordPress installed in /home/wp, do:
+<pre>
+   chmod 777 /home/wp/wordpress/wp-content
+</pre>
+
+<li>Set up the FTP server, as in X.3.a.
+<li>Open the firewall (shudder), as in X.3.b and X.3.c.
+<li>Install the new theme via the WordPress interface.
+<li>Close the firewall and stop FTP, as in X.3.e.
+<li>Restore the file permissions:
+<pre>
+   chmod 755 /home/wp/wordpress/wp-content
+</pre>
+
+</ol>
+
+</ol>
+
+
+
+
+
+<p/>
+<b>XI. Next?</b>
 <ol>
 <li>Docker?
 <li>...?
